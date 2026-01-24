@@ -1,0 +1,13 @@
+name = "hono_vite_workers"
+main = "src/index.ts"
+compatibility_date = "2026-01-01"
+compatibility_flags = ["nodejs_compat_v2"]
+
+[env.dev.observability]
+enabled = true
+head_sampling_rate = 1
+
+[dev]
+port = 8787
+ip = "0.0.0.0"
+local_protocol = "http"
