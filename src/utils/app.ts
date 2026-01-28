@@ -18,25 +18,27 @@ export const formatCount = (count: number): string => {
   return count.toString()
 }
 
-export const AppStoreAppSchema = z.object({
-  trackId: z.number(),
-  trackName: z.string().nonempty(),
-  bundleId: z.string().nonempty(),
-  sellerName: z.string().nonempty(),
-  primaryGenreName: z.string().nonempty(),
-  artworkUrl512: z.string().nonempty(),
-  screenshotUrls: z.array(z.string().nonempty()),
-  ipadScreenshotUrls: z.array(z.string().nonempty()),
-  description: z.string().nonempty(),
-  version: z.string().nonempty(),
-  fileSizeBytes: z.string().nonempty(),
-  averageUserRating: z.number(),
-  userRatingCount: z.number(),
-  trackContentRating: z.string().nonempty(),
-  releaseDate: z.string().nonempty(),
-  currentVersionReleaseDate: z.string().nonempty(),
-  releaseNotes: z.string().optional()
-}).passthrough()
+export const AppStoreAppSchema = z
+  .object({
+    trackId: z.number().int(),
+    trackName: z.string().nonempty(),
+    bundleId: z.string().nonempty(),
+    sellerName: z.string().nonempty(),
+    primaryGenreName: z.string().nonempty(),
+    artworkUrl512: z.string().nonempty(),
+    screenshotUrls: z.array(z.string().nonempty()),
+    ipadScreenshotUrls: z.array(z.string().nonempty()),
+    description: z.string().nonempty(),
+    version: z.string().nonempty(),
+    fileSizeBytes: z.string().nonempty(),
+    averageUserRating: z.number(),
+    userRatingCount: z.number(),
+    trackContentRating: z.string().nonempty(),
+    releaseDate: z.string().nonempty(),
+    currentVersionReleaseDate: z.string().nonempty(),
+    releaseNotes: z.string().optional()
+  })
+  .passthrough()
 
 export type AppStoreApp = z.infer<typeof AppStoreAppSchema>
 
