@@ -120,3 +120,84 @@
     @apply bg-background text-foreground;
   }
 }
+
+@layer utilities {
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  @keyframes slide-up {
+    from {
+      transform: translateY(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  .animate-slide-up {
+    animation: slide-up 0.3s ease-out;
+  }
+
+  /* Apple App Store Button Styles - Mobile Optimized */
+  .get-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 100px;
+    font-size: 15px;
+    font-weight: 700;
+    line-height: 1;
+    padding: 8px 16px;
+    min-width: 70px;
+    transition: all 0.15s ease;
+    cursor: pointer;
+    border: none;
+    -webkit-tap-highlight-color: transparent;
+    user-select: none;
+    word-break: keep-all;
+  }
+
+  .get-button-gray {
+    background-color: rgba(0, 0, 0, 0.06);
+    color: #007aff;
+  }
+
+  .get-button-gray:active {
+    background-color: rgba(0, 0, 0, 0.12);
+    transform: scale(0.97);
+  }
+
+  .get-button-blue {
+    background-color: #007aff;
+    color: white;
+  }
+
+  .get-button-blue:active {
+    background-color: #006ae6;
+    transform: scale(0.97);
+  }
+
+  .dark .get-button-gray {
+    background-color: rgba(255, 255, 255, 0.12);
+    color: #0a84ff;
+  }
+
+  .dark .get-button-gray:active {
+    background-color: rgba(255, 255, 255, 0.18);
+  }
+
+  .dark .get-button-blue {
+    background-color: #0a84ff;
+  }
+
+  .dark .get-button-blue:active {
+    background-color: #0077ed;
+  }
+}

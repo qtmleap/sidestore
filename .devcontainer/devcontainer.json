@@ -1,5 +1,5 @@
 {
-  "name": "Hono + Bun",
+  "name": "AppStore Clone",
   "dockerComposeFile": ["compose.yaml"],
   "service": "app",
   "workspaceFolder": "/home/vscode/app",
@@ -8,6 +8,9 @@
   "mounts": [
     "source=${localEnv:HOME}/.gnupg,target=/home/vscode/.gnupg,type=bind,consistency=cached"
   ],
+  "remoteEnv": {
+    // "CLOUDFLARE_API_TOKEN": "${localEnv:CLOUDFLARE_API_TOKEN}"
+  },
   "features": {
     "ghcr.io/devcontainers/features/git:1": {
       "version": "2.52.0"

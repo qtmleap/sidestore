@@ -1,7 +1,13 @@
-name = "hono_vite_workers"
+name = "appstore_clone"
 main = "src/index.ts"
 compatibility_date = "2026-01-01"
 compatibility_flags = ["nodejs_compat_v2"]
+
+[env.dev]
+name = "appstore_clone_dev"
+workers_dev = false
+preview_urls = false
+routes = [{ pattern = "app.qleap.jp", custom_domain = true }]
 
 [env.dev.observability]
 enabled = true
@@ -11,6 +17,20 @@ head_sampling_rate = 1
 directory = "dist"
 not_found_handling = "single-page-application"
 binding = "ASSETS"
+
+[assets]
+directory = "dist"
+not_found_handling = "single-page-application"
+binding = "ASSETS"
+
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+# R2 Bucket for IPA files (OTA distribution)
+[[env.dev.r2_buckets]]
+binding = "R2_BUCKET"
+bucket_name = "app-distribution"
 
 [dev]
 port = 8787
