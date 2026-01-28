@@ -27,6 +27,30 @@ export const mockApps: App[] = [
     ]
   },
   {
+    id: '333903272',
+    name: 'X (Login Fix)',
+    icon: 'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/3c/c7/2d/3cc72d17-ee6d-751f-54a8-63017806c3ad/ProductionAppIcon-0-0-1x_U007emarketing-0-8-0-0-0-85-220.png/100x100bb.jpg',
+    category: 'ソーシャルネットワーキング',
+    developer: 'X Corp.',
+    price: '無料',
+    rating: 4.3,
+    screenshots: [
+      'https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/c7/cd/0a/c7cd0a81-ad02-5af9-8ef2-f1418f518f4e/1242x2688-1.jpg/392x696bb.jpg'
+    ]
+  },
+  {
+    id: '333903273',
+    name: 'NeoFreeBird',
+    icon: 'https://is1-ssl.mzstatic.com/image/thumb/Purple221/v4/3c/c7/2d/3cc72d17-ee6d-751f-54a8-63017806c3ad/ProductionAppIcon-0-0-1x_U007emarketing-0-8-0-0-0-85-220.png/100x100bb.jpg',
+    category: 'ソーシャルネットワーキング',
+    developer: 'X Corp.',
+    price: '無料',
+    rating: 4.3,
+    screenshots: [
+      'https://is1-ssl.mzstatic.com/image/thumb/PurpleSource211/v4/c7/cd/0a/c7cd0a81-ad02-5af9-8ef2-f1418f518f4e/1242x2688-1.jpg/392x696bb.jpg'
+    ]
+  },
+  {
     id: '389801252',
     name: 'Instagram',
     icon: 'https://is1-ssl.mzstatic.com/image/thumb/Purple211/v4/4f/65/4d/4f654d6b-30ad-d39d-d822-f5c1f0e0dce1/Prod-0-0-1x_U007emarketing-0-7-0-85-220.png/100x100bb.jpg',
