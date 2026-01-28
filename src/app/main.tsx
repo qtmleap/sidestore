@@ -4,7 +4,7 @@ import { createRouter, RouterProvider } from '@tanstack/react-router'
 import dayjs from 'dayjs'
 import timezone from 'dayjs/plugin/timezone'
 import utc from 'dayjs/plugin/utc'
-import { Locales } from 'intlayer'
+import { type LocalesValues, Locales } from 'intlayer'
 import { StrictMode } from 'react'
 import ReactDOM from 'react-dom/client'
 import { IntlayerProvider } from 'react-intlayer'
@@ -20,7 +20,7 @@ import { QueryClient } from '@tanstack/react-query'
 import { ThemeProvider } from '@/components/theme-provider'
 
 // Detect browser language and map to supported locales
-const getBrowserLocale = (): Locales => {
+const getBrowserLocale = (): LocalesValues => {
   const browserLang = navigator.language || navigator.languages?.[0] || 'en'
   // Check if Japanese
   if (browserLang.startsWith('ja')) {
