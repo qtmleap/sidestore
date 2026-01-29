@@ -89,7 +89,7 @@ jobs:
 
           # Download IPA directly from R2
           bunx wrangler r2 object get \
-            "$R2_BUCKET/ipa/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa" \
+            "$R2_BUCKET/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa" \
             --file unsigned/app.ipa
 
           echo "Downloaded IPA size: $(du -h unsigned/app.ipa | cut -f1)"
@@ -167,79 +167,28 @@ jobs:
           echo "✅ Signed IPA created"
           echo "Signed IPA size: $(du -h signed/app.ipa | cut -f1)"
 
-      - name: Generate manifest.plist for OTA installation
-        run: |
-          cat > signed/manifest.plist << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-            <key>items</key>
-            <array>
-              <dict>
-                <key>assets</key>
-                <array>
-                  <dict>
-                    <key>kind</key>
-                    <string>software-package</string>
-                    <key>url</key>
-                    <string>${R2_BASE_URL}/ipa/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa</string>
-                  </dict>
-                </array>
-                <key>metadata</key>
-                <dict>
-                  <key>bundle-identifier</key>
-                  <string>${{ matrix.app.bundle_id }}</string>
-                  <key>bundle-version</key>
-                  <string>1.0</string>
-                  <key>kind</key>
-                  <string>software</string>
-                  <key>title</key>
-                  <string>${{ matrix.app.name }}</string>
-                </dict>
-              </dict>
-            </array>
-          </dict>
-          </plist>
-          EOF
-
       - name: Upload to R2
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME || 'app-distribution' }}
         run: |
-          # Upload IPA file
           bunx wrangler r2 object put \
-            "$R2_BUCKET/ipa/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa" \
+            "$R2_BUCKET/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa" \
             --file signed/app.ipa \
             --content-type "application/octet-stream"
 
-          # Upload manifest.plist
-          bunx wrangler r2 object put \
-            "$R2_BUCKET/ipa/${{ matrix.app.id }}/manifest.plist" \
-            --file signed/manifest.plist \
-            --content-type "application/xml"
+          echo "✅ Uploaded: ${{ matrix.app.id }}/${{ matrix.app.id }}.ipa"
 
-          echo "✅ Successfully uploaded IPA and manifest to R2"
-          echo "📱 IPA: ipa/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa"
-          echo "📄 Manifest: ipa/${{ matrix.app.id }}/manifest.plist"
-
-      - name: Create installation link
+      - name: Summary
         run: |
-          INSTALL_URL="itms-services://?action=download-manifest&url=${R2_BASE_URL}/ipa/${{ matrix.app.id }}/manifest.plist"
-
-          echo "## 📲 ${{ matrix.app.name }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Install URL:**" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "$INSTALL_URL" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ ${{ matrix.app.name }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| App ID | ${{ matrix.app.id }} |" >> $GITHUB_STEP_SUMMARY
           echo "| Bundle ID | ${{ matrix.app.bundle_id }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| URL | ${R2_BASE_URL}/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa |" >> $GITHUB_STEP_SUMMARY
 
       - name: Cleanup
         if: always()
@@ -250,8 +199,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: signed-ipa-${{ matrix.app.id }}-v${{ inputs.version }}
-          path: |
-            signed/app.ipa
-            signed/manifest.plist
+          name: signed-ipa-${{ matrix.app.id }}
+          path: signed/app.ipa
           retention-days: 30
