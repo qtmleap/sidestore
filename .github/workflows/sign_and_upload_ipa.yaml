@@ -90,7 +90,8 @@ jobs:
           # Download IPA directly from R2
           bunx wrangler r2 object get \
             "$R2_BUCKET/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa" \
-            --file unsigned/app.ipa
+            --file unsigned/app.ipa \
+            --remote
 
           echo "Downloaded IPA size: $(du -h unsigned/app.ipa | cut -f1)"
 
@@ -176,7 +177,8 @@ jobs:
           bunx wrangler r2 object put \
             "$R2_BUCKET/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa" \
             --file signed/app.ipa \
-            --content-type "application/octet-stream"
+            --content-type "application/octet-stream" \
+            --remote
 
           echo "✅ Uploaded: ${{ matrix.app.id }}/${{ matrix.app.id }}.ipa"
 
