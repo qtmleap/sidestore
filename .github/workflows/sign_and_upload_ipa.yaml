@@ -1,0 +1,255 @@
+name: Sign and Upload IPA to R2
+
+on:
+  workflow_dispatch:
+    inputs:
+      certificate_type:
+        description: "Certificate type for signing"
+        required: false
+        type: choice
+        default: "adhoc"
+        options:
+          - adhoc
+          - enterprise
+          - appstore
+      app_filter:
+        description: "Filter apps by ID (comma-separated, empty for all)"
+        required: false
+        type: string
+
+jobs:
+  prepare:
+    name: Prepare app matrix
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.set-matrix.outputs.matrix }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Set matrix
+        id: set-matrix
+        run: |
+          # Read apps from JSON file
+          if [ -n "${{ inputs.app_filter }}" ]; then
+            # Filter by app IDs
+            FILTER="${{ inputs.app_filter }}"
+            MATRIX=$(jq -c --arg filter "$FILTER" '
+              .apps | map(select(.id as $id | $filter | split(",") | map(gsub("\\s+"; "")) | index($id)))
+            ' .github/apps.json)
+          else
+            # All apps
+            MATRIX=$(jq -c '.apps' .github/apps.json)
+          fi
+
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+          echo "Apps to process:"
+          echo "$MATRIX" | jq .
+
+  sign-and-upload:
+    name: Sign ${{ matrix.app.name }}
+    needs: prepare
+    runs-on: macos-14
+    timeout-minutes: 30
+    env:
+      R2_BASE_URL: "https://app.qleap.jp"
+      TEAM_ID: "5Q94QJ7G98"
+    strategy:
+      fail-fast: false
+      matrix:
+        app: ${{ fromJson(needs.prepare.outputs.matrix) }}
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+          bundler-cache: false
+
+      - name: Install fastlane
+        run: |
+          gem install fastlane --no-document
+          fastlane --version
+
+      - name: Download unsigned IPA
+        run: |
+          mkdir -p unsigned signed
+
+          # Download IPA from the same domain
+          IPA_URL="${R2_BASE_URL}/ipa/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa"
+
+          echo "Downloading IPA from: $IPA_URL"
+          curl -L "$IPA_URL" -o unsigned/app.ipa
+          echo "Downloaded IPA size: $(du -h unsigned/app.ipa | cut -f1)"
+
+      - name: Sign IPA with fastlane
+        env:
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
+          MATCH_GIT_URL: "https://x-access-token:${{ github.token }}@github.com/qtmleap/match.git"
+        run: |
+          # Create Fastfile for signing
+          cat > Fastfile << 'FASTFILE'
+          default_platform(:ios)
+
+          platform :ios do
+            desc "Fetch certificates and profiles, then resign IPA"
+            lane :sign_ipa do |options|
+              # Setup CI environment (creates temporary keychain automatically)
+              setup_ci
+
+              # Determine match type
+              match_type = case options[:cert_type]
+                when "appstore" then "appstore"
+                when "enterprise" then "enterprise"
+                else "adhoc"
+              end
+
+              # Fetch certificates and provisioning profiles using match
+              match(
+                git_url: ENV["MATCH_GIT_URL"],
+                type: match_type,
+                app_identifier: options[:bundle_id],
+                team_id: options[:team_id],
+                readonly: true
+              )
+
+              # Get signing identity and provisioning profile
+              signing_identity = ENV["sigh_#{options[:bundle_id]}_#{match_type}_certificate-name"] ||
+                                 lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING]&.values&.first ||
+                                 ENV["FASTLANE_SIGNING_IDENTITY"]
+
+              profile_path = ENV["sigh_#{options[:bundle_id]}_#{match_type}"] ||
+                             lane_context[SharedValues::SIGH_PROFILE_PATH]
+
+              UI.message("Signing identity: #{signing_identity}")
+              UI.message("Profile path: #{profile_path}")
+
+              # Resign the IPA
+              resign(
+                ipa: options[:ipa_path],
+                signing_identity: signing_identity,
+                provisioning_profile: profile_path,
+                use_app_entitlements: false
+              )
+
+              # Move resigned IPA to signed directory
+              resigned_ipa = options[:ipa_path].gsub(".ipa", "-resigned.ipa")
+              if File.exist?(resigned_ipa)
+                FileUtils.mv(resigned_ipa, options[:output_path])
+              else
+                FileUtils.cp(options[:ipa_path], options[:output_path])
+              end
+            end
+          end
+          FASTFILE
+
+          # Read team_id from settings
+          TEAM_ID=$(jq -r '.settings.team_id' .github/apps.json)
+
+          # Run fastlane
+          fastlane ios sign_ipa \
+            cert_type:"${{ inputs.certificate_type }}" \
+            bundle_id:"${{ matrix.app.bundle_id }}" \
+            team_id:"${TEAM_ID}" \
+            ipa_path:"unsigned/app.ipa" \
+            output_path:"signed/app.ipa"
+
+          echo "✅ Signed IPA created"
+          echo "Signed IPA size: $(du -h signed/app.ipa | cut -f1)"
+
+      - name: Generate manifest.plist for OTA installation
+        run: |
+          cat > signed/manifest.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>items</key>
+            <array>
+              <dict>
+                <key>assets</key>
+                <array>
+                  <dict>
+                    <key>kind</key>
+                    <string>software-package</string>
+                    <key>url</key>
+                    <string>${R2_BASE_URL}/ipa/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa</string>
+                  </dict>
+                </array>
+                <key>metadata</key>
+                <dict>
+                  <key>bundle-identifier</key>
+                  <string>${{ matrix.app.bundle_id }}</string>
+                  <key>bundle-version</key>
+                  <string>1.0</string>
+                  <key>kind</key>
+                  <string>software</string>
+                  <key>title</key>
+                  <string>${{ matrix.app.name }}</string>
+                </dict>
+              </dict>
+            </array>
+          </dict>
+          </plist>
+          EOF
+
+      - name: Upload to R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET_NAME || 'app-distribution' }}
+        run: |
+          # Upload IPA file
+          bun wrangler r2 object put \
+            "$R2_BUCKET/ipa/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa" \
+            --file signed/app.ipa \
+            --content-type "application/octet-stream"
+
+          # Upload manifest.plist
+          bun wrangler r2 object put \
+            "$R2_BUCKET/ipa/${{ matrix.app.id }}/manifest.plist" \
+            --file signed/manifest.plist \
+            --content-type "application/xml"
+
+          echo "✅ Successfully uploaded IPA and manifest to R2"
+          echo "📱 IPA: ipa/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa"
+          echo "📄 Manifest: ipa/${{ matrix.app.id }}/manifest.plist"
+
+      - name: Create installation link
+        run: |
+          INSTALL_URL="itms-services://?action=download-manifest&url=${R2_BASE_URL}/ipa/${{ matrix.app.id }}/manifest.plist"
+
+          echo "## 📲 ${{ matrix.app.name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Install URL:**" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "$INSTALL_URL" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| App ID | ${{ matrix.app.id }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bundle ID | ${{ matrix.app.bundle_id }} |" >> $GITHUB_STEP_SUMMARY
+
+      - name: Cleanup
+        if: always()
+        run: |
+          rm -f Fastfile
+
+      - name: Upload artifacts
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-ipa-${{ matrix.app.id }}-v${{ inputs.version }}
+          path: |
+            signed/app.ipa
+            signed/manifest.plist
+          retention-days: 30
