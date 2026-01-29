@@ -42,6 +42,7 @@ platform :ios do
 
     # Create App ID if it doesn't exist
     produce(
+      username: ENV["APPLE_ID"],
       app_identifier: new_bundle_id,
       app_name: options[:app_name] || new_bundle_id,
       team_id: options[:team_id],

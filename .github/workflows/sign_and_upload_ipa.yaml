@@ -97,6 +97,7 @@ jobs:
 
       - name: Sign IPA with fastlane
         env:
+          APPLE_ID: ${{ secrets.APPLE_ID }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           MATCH_GIT_URL: "https://x-access-token:${{ secrets.MATCH_GIT_TOKEN }}@github.com/qtmleap/match.git"
           APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY_ID }}
