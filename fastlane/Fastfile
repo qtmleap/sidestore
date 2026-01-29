@@ -54,7 +54,8 @@ platform :ios do
     sh("unzip -q '#{ipa_path}' -d '#{temp_dir}'")
 
     # Find all bundle IDs in the IPA (main app + extensions)
-    all_bundle_ids = []
+    # Track both original (in IPA) and transformed (with team ID) bundle IDs
+    bundle_id_mapping = {}  # original -> transformed
     extension_bundle_ids = []
     team_id = options[:team_id]
     original_bundle_id = options[:bundle_id]
@@ -63,6 +64,7 @@ platform :ios do
     Dir.glob("#{temp_dir}/Payload/**/*.app/Info.plist").each do |plist|
       bundle_id_output = `/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "#{plist}" 2>/dev/null`.strip
       unless bundle_id_output.empty?
+        original_id = bundle_id_output
         # Check if bundle ID already has team ID suffix (already resigned IPA)
         # If so, use it as-is; otherwise transform it
         if bundle_id_output.include?(".#{team_id}")
@@ -78,7 +80,7 @@ platform :ios do
           UI.message("Skipping unrelated bundle ID: #{bundle_id_output}")
           next
         end
-        all_bundle_ids << transformed_id
+        bundle_id_mapping[original_id] = transformed_id
         extension_bundle_ids << transformed_id if plist.include?(".appex") || transformed_id != new_bundle_id
       end
     end
@@ -87,6 +89,7 @@ platform :ios do
     Dir.glob("#{temp_dir}/Payload/**/*.appex/Info.plist").each do |plist|
       bundle_id_output = `/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "#{plist}" 2>/dev/null`.strip
       unless bundle_id_output.empty?
+        original_id = bundle_id_output
         # Check if bundle ID already has team ID suffix
         if bundle_id_output.include?(".#{team_id}")
           transformed_id = bundle_id_output
@@ -99,15 +102,16 @@ platform :ios do
           UI.message("Skipping unrelated extension bundle ID: #{bundle_id_output}")
           next
         end
-        all_bundle_ids << transformed_id
+        bundle_id_mapping[original_id] = transformed_id
         extension_bundle_ids << transformed_id
       end
     end
 
-    all_bundle_ids.uniq!
+    all_bundle_ids = bundle_id_mapping.values.uniq
     extension_bundle_ids.uniq!
 
-    UI.message("All bundle IDs found in IPA: #{all_bundle_ids.join(', ')}")
+    UI.message("Bundle ID mapping (original -> transformed):")
+    bundle_id_mapping.each { |k, v| UI.message("  #{k} -> #{v}") }
 
     # Clean up temp directory
     FileUtils.rm_rf(temp_dir)
@@ -150,29 +154,37 @@ platform :ios do
     profiles_dir = File.join(Dir.home, "Library", "MobileDevice", "Provisioning Profiles")
 
     # Build provisioning profile hash for resign action
-    # Format: { "bundle_id" => "profile_path" }
+    # IMPORTANT: resign expects ORIGINAL bundle IDs (as in the IPA) mapped to profile paths
+    # The resign action will change the bundle ID to whatever is in the profile
     provisioning_profiles = {}
 
-    successfully_provisioned.each do |bundle_id|
+    # Create reverse mapping: transformed -> original
+    transformed_to_original = bundle_id_mapping.invert
+
+    successfully_provisioned.each do |transformed_id|
       profile_path = nil
       Dir.glob(File.join(profiles_dir, "*.mobileprovision")).each do |file|
         content = File.read(file)
-        # Check if this profile contains the bundle ID
-        if content.include?(bundle_id)
+        # Check if this profile contains the transformed bundle ID
+        if content.include?(transformed_id)
           profile_path = file
-          UI.message("Found profile for #{bundle_id}: #{file}")
+          UI.message("Found profile for #{transformed_id}: #{file}")
           break
         end
       end
 
       if profile_path
-        provisioning_profiles[bundle_id] = profile_path
+        # Find the original bundle ID for this transformed ID
+        original_id = transformed_to_original[transformed_id] || transformed_id
+        provisioning_profiles[original_id] = profile_path
+        UI.message("Mapping: #{original_id} -> #{profile_path}")
       else
-        UI.important("Warning: Could not find profile for #{bundle_id}")
+        UI.important("Warning: Could not find profile for #{transformed_id}")
       end
     end
 
-    UI.message("Provisioning profiles map: #{provisioning_profiles}")
+    UI.message("Provisioning profiles map (original bundle ID -> profile):")
+    provisioning_profiles.each { |k, v| UI.message("  #{k} -> #{v}") }
 
     # Get the full signing identity from the keychain
     # Use security command to find the distribution certificate
