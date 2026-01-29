@@ -98,7 +98,7 @@ jobs:
       - name: Sign IPA with fastlane
         env:
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
-          MATCH_GIT_URL: "https://x-access-token:${{ github.token }}@github.com/qtmleap/match.git"
+          MATCH_GIT_URL: "https://x-access-token:${{ secrets.MATCH_GIT_TOKEN }}@github.com/qtmleap/match.git"
         run: |
           # Create fastlane directory and Fastfile
           mkdir -p fastlane
