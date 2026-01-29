@@ -107,30 +107,53 @@ platform :ios do
     all_bundle_ids.uniq!
     extension_bundle_ids.uniq!
 
-    UI.message("All bundle IDs to provision: #{all_bundle_ids.join(', ')}")
+    UI.message("All bundle IDs found in IPA: #{all_bundle_ids.join(', ')}")
 
     # Clean up temp directory
     FileUtils.rm_rf(temp_dir)
 
-    # Fetch certificates and provisioning profiles using match for ALL bundle IDs
-    # Note: App IDs must be created manually in Apple Developer Portal first
+    # First, provision the main app bundle ID (this must succeed)
+    UI.message("Provisioning main app: #{new_bundle_id}")
     match(
       git_url: ENV["MATCH_GIT_URL"],
       type: match_type,
-      app_identifier: all_bundle_ids,
+      app_identifier: new_bundle_id,
       team_id: options[:team_id],
       api_key: api_key,
       readonly: false
     )
 
-    # Get provisioning profile paths for all bundle IDs
+    # Try to provision extensions individually, but don't fail if they don't exist
+    successfully_provisioned = [new_bundle_id]
+    extension_bundle_ids.each do |ext_bundle_id|
+      begin
+        UI.message("Attempting to provision extension: #{ext_bundle_id}")
+        match(
+          git_url: ENV["MATCH_GIT_URL"],
+          type: match_type,
+          app_identifier: ext_bundle_id,
+          team_id: options[:team_id],
+          api_key: api_key,
+          readonly: true  # Only use existing profiles for extensions
+        )
+        successfully_provisioned << ext_bundle_id
+        UI.success("Successfully provisioned: #{ext_bundle_id}")
+      rescue => e
+        UI.important("Could not provision #{ext_bundle_id}: #{e.message}")
+        UI.important("You may need to create this App ID in the Developer Portal")
+      end
+    end
+
+    UI.message("Successfully provisioned bundle IDs: #{successfully_provisioned.join(', ')}")
+
+    # Get provisioning profile paths for successfully provisioned bundle IDs only
     profiles_dir = File.join(Dir.home, "Library", "MobileDevice", "Provisioning Profiles")
 
     # Build provisioning profile hash for resign action
     # Format: { "bundle_id" => "profile_path" }
     provisioning_profiles = {}
 
-    all_bundle_ids.each do |bundle_id|
+    successfully_provisioned.each do |bundle_id|
       profile_path = nil
       Dir.glob(File.join(profiles_dir, "*.mobileprovision")).each do |file|
         content = File.read(file)
