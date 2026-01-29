@@ -56,21 +56,30 @@ platform :ios do
     # Find all bundle IDs in the IPA (main app + extensions)
     all_bundle_ids = []
     extension_bundle_ids = []
+    team_id = options[:team_id]
+    original_bundle_id = options[:bundle_id]
 
     # Find all Info.plist files and extract bundle IDs
     Dir.glob("#{temp_dir}/Payload/**/*.app/Info.plist").each do |plist|
       bundle_id_output = `/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "#{plist}" 2>/dev/null`.strip
       unless bundle_id_output.empty?
-        # Transform to new bundle ID format
-        # Original: com.atebits.Tweetie3 -> com.atebits.Tweetie3.TEAM_ID
-        # Extension: com.atebits.Tweetie3.NotificationContentExtension -> com.atebits.Tweetie3.TEAM_ID.NotificationContentExtension
-        if bundle_id_output.start_with?(options[:bundle_id])
-          suffix = bundle_id_output.sub(options[:bundle_id], "")
+        # Check if bundle ID already has team ID suffix (already resigned IPA)
+        # If so, use it as-is; otherwise transform it
+        if bundle_id_output.include?(".#{team_id}")
+          # Already has team ID, use as-is
+          transformed_id = bundle_id_output
+          UI.message("Bundle ID already has team suffix: #{bundle_id_output}")
+        elsif bundle_id_output.start_with?(original_bundle_id)
+          # Transform: com.atebits.Tweetie3 -> com.atebits.Tweetie3.TEAM_ID
+          suffix = bundle_id_output.sub(original_bundle_id, "")
           transformed_id = "#{new_bundle_id}#{suffix}"
-          all_bundle_ids << transformed_id
-          extension_bundle_ids << transformed_id unless suffix.empty?
-          UI.message("Found bundle ID: #{bundle_id_output} -> #{transformed_id}")
+          UI.message("Transforming bundle ID: #{bundle_id_output} -> #{transformed_id}")
+        else
+          UI.message("Skipping unrelated bundle ID: #{bundle_id_output}")
+          next
         end
+        all_bundle_ids << transformed_id
+        extension_bundle_ids << transformed_id if plist.include?(".appex") || transformed_id != new_bundle_id
       end
     end
 
@@ -78,13 +87,20 @@ platform :ios do
     Dir.glob("#{temp_dir}/Payload/**/*.appex/Info.plist").each do |plist|
       bundle_id_output = `/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "#{plist}" 2>/dev/null`.strip
       unless bundle_id_output.empty?
-        if bundle_id_output.start_with?(options[:bundle_id])
-          suffix = bundle_id_output.sub(options[:bundle_id], "")
+        # Check if bundle ID already has team ID suffix
+        if bundle_id_output.include?(".#{team_id}")
+          transformed_id = bundle_id_output
+          UI.message("Extension already has team suffix: #{bundle_id_output}")
+        elsif bundle_id_output.start_with?(original_bundle_id)
+          suffix = bundle_id_output.sub(original_bundle_id, "")
           transformed_id = "#{new_bundle_id}#{suffix}"
-          all_bundle_ids << transformed_id
-          extension_bundle_ids << transformed_id
-          UI.message("Found extension bundle ID: #{bundle_id_output} -> #{transformed_id}")
+          UI.message("Transforming extension bundle ID: #{bundle_id_output} -> #{transformed_id}")
+        else
+          UI.message("Skipping unrelated extension bundle ID: #{bundle_id_output}")
+          next
         end
+        all_bundle_ids << transformed_id
+        extension_bundle_ids << transformed_id
       end
     end
 
