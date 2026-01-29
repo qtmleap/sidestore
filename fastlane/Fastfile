@@ -80,7 +80,38 @@ platform :ios do
       UI.message("Using most recent profile: #{profile_path}")
     end
 
-    signing_identity = "Apple Distribution"
+    # Get the full signing identity from the keychain
+    # Use security command to find the distribution certificate
+    keychain_output = `security find-identity -v -p codesigning`
+    UI.message("Available signing identities:\n#{keychain_output}")
+
+    # Find Apple Distribution identity (match installs it with team name)
+    signing_identity = nil
+    keychain_output.each_line do |line|
+      if line.include?("Apple Distribution") && line.include?(options[:team_id])
+        # Extract the identity string between quotes
+        match = line.match(/"([^"]+)"/)
+        if match
+          signing_identity = match[1]
+          break
+        end
+      end
+    end
+
+    # Fallback to any Apple Distribution identity
+    if signing_identity.nil?
+      keychain_output.each_line do |line|
+        if line.include?("Apple Distribution")
+          match = line.match(/"([^"]+)"/)
+          if match
+            signing_identity = match[1]
+            break
+          end
+        end
+      end
+    end
+
+    UI.user_error!("Could not find Apple Distribution signing identity in keychain") if signing_identity.nil?
 
     UI.message("Signing identity: #{signing_identity}")
     UI.message("Profile path: #{profile_path}")
