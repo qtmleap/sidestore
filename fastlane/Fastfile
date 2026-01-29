@@ -40,20 +40,8 @@ platform :ios do
     new_bundle_id = "#{options[:bundle_id]}.#{options[:team_id]}"
     UI.message("New Bundle ID: #{new_bundle_id}")
 
-    # Create App ID if it doesn't exist
-    # app_store_connect_api_key is already set, so produce will use it automatically
-    begin
-      produce(
-        app_identifier: new_bundle_id,
-        app_name: (options[:app_name] || new_bundle_id).gsub(/[^a-zA-Z0-9 ]/, ""),
-        team_id: options[:team_id],
-        skip_itc: true
-      )
-    rescue => e
-      UI.important("Could not create App ID (may already exist): #{e.message}")
-    end
-
     # Fetch certificates and provisioning profiles using match
+    # Note: App ID must be created manually in Apple Developer Portal first
     match(
       git_url: ENV["MATCH_GIT_URL"],
       type: match_type,
