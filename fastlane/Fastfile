@@ -42,8 +42,12 @@ platform :ios do
 
     # Extract IPA to find all nested bundle IDs (extensions)
     temp_dir = Dir.mktmpdir("ipa_extract")
-    ipa_path = File.expand_path(options[:ipa_path])
 
+    # Resolve path relative to workspace root (parent of fastlane directory)
+    workspace_root = ENV['GITHUB_WORKSPACE'] || File.expand_path("..", __dir__)
+    ipa_path = File.expand_path(options[:ipa_path], workspace_root)
+
+    UI.message("Workspace root: #{workspace_root}")
     UI.message("IPA path: #{ipa_path}")
 
     # Unzip the IPA
@@ -176,7 +180,7 @@ platform :ios do
     )
 
     # Move resigned IPA to signed directory
-    output_path = File.expand_path(options[:output_path])
+    output_path = File.expand_path(options[:output_path], workspace_root)
     resigned_ipa = ipa_path.gsub(".ipa", "-resigned.ipa")
     if File.exist?(resigned_ipa)
       FileUtils.mv(resigned_ipa, output_path)
