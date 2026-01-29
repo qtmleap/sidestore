@@ -1,0 +1,77 @@
+# This file contains the fastlane.tools configuration
+# You can find the documentation at https://docs.fastlane.tools
+#
+# For a list of all available actions, check out
+#
+#     https://docs.fastlane.tools/actions
+#
+# For a list of all available plugins, check out
+#
+#     https://docs.fastlane.tools/plugins/available-plugins
+#
+
+# Uncomment the line if you want fastlane to automatically update itself
+# update_fastlane
+
+default_platform(:ios)
+
+platform :ios do
+  desc "Fetch or generate Ad Hoc provisioning profiles"
+  lane :match_adhoc do
+    match(
+      type: "adhoc",
+      readonly: false
+    )
+  end
+
+  desc "Resign IPA with Ad Hoc profile and upload to R2"
+  lane :resign_and_upload do |options|
+    ipa_path = options[:ipa_path]
+    app_identifier = options[:app_identifier]
+    
+    unless ipa_path
+      UI.user_error!("Please provide ipa_path parameter")
+    end
+    
+    unless app_identifier
+      UI.user_error!("Please provide app_identifier parameter")
+    end
+    
+    # Create App Identifier if it doesn't exist
+    produce(
+      app_identifier: app_identifier,
+      skip_itc: true
+    )
+    
+    # Generate Ad Hoc provisioning profile with all registered devices
+    match(
+      type: "adhoc",
+      app_identifier: app_identifier,
+      force_for_new_devices: true,
+      readonly: false
+    )
+    
+    # Get the provisioning profile path
+    profile_path = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING][app_identifier]
+    
+    # Resign the IPA
+    resigned_ipa_path = resign(
+      ipa: ipa_path,
+      signing_identity: "Apple Distribution",
+      provisioning_profile: profile_path
+    )
+    
+    # Extract app info for R2 path
+    bundle_id = app_identifier
+    version = get_ipa_info_plist_value(ipa: resigned_ipa_path, key: "CFBundleShortVersionString")
+    
+    # Upload to R2 using wrangler
+    r2_path = "#{bundle_id}/#{version}/app.ipa"
+    
+    sh("bun wrangler r2 object put app-distribution/#{r2_path} --file #{resigned_ipa_path}")
+    
+    UI.success("Successfully uploaded resigned IPA to R2: #{r2_path}")
+    
+    resigned_ipa_path
+  end
+end

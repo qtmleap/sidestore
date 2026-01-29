@@ -79,15 +79,19 @@ jobs:
           gem install fastlane --no-document
           fastlane --version
 
-      - name: Download unsigned IPA
+      - name: Download unsigned IPA from R2
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET_NAME || 'app-distribution' }}
         run: |
           mkdir -p unsigned signed
 
-          # Download IPA from the same domain
-          IPA_URL="${R2_BASE_URL}/ipa/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa"
+          # Download IPA directly from R2
+          bun wrangler r2 object get \
+            "$R2_BUCKET/ipa/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa" \
+            --file unsigned/app.ipa
 
-          echo "Downloading IPA from: $IPA_URL"
-          curl -L "$IPA_URL" -o unsigned/app.ipa
           echo "Downloaded IPA size: $(du -h unsigned/app.ipa | cut -f1)"
 
       - name: Sign IPA with fastlane
@@ -95,8 +99,9 @@ jobs:
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           MATCH_GIT_URL: "https://x-access-token:${{ github.token }}@github.com/qtmleap/match.git"
         run: |
-          # Create Fastfile for signing
-          cat > Fastfile << 'FASTFILE'
+          # Create fastlane directory and Fastfile
+          mkdir -p fastlane
+          cat > fastlane/Fastfile << 'FASTFILE'
           default_platform(:ios)
 
           platform :ios do
@@ -150,9 +155,6 @@ jobs:
             end
           end
           FASTFILE
-
-          # Read team_id from settings
-          TEAM_ID=$(jq -r '.settings.team_id' .github/apps.json)
 
           # Run fastlane
           fastlane ios sign_ipa \
@@ -242,7 +244,7 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          rm -f Fastfile
+          rm -rf fastlane
 
       - name: Upload artifacts
         if: success()
