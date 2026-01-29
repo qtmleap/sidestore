@@ -39,6 +39,7 @@ platform :ios do
     
     # Create App Identifier if it doesn't exist
     produce(
+      username: ENV["APPLE_ID"],
       app_identifier: app_identifier,
       skip_itc: true
     )
