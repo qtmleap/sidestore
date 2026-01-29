@@ -68,11 +68,6 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install Wrangler
-        run: |
-          bun install -g wrangler
-          wrangler --version
-
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
@@ -93,7 +88,7 @@ jobs:
           mkdir -p unsigned signed
 
           # Download IPA directly from R2
-          bun wrangler r2 object get \
+          bunx wrangler r2 object get \
             "$R2_BUCKET/ipa/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa" \
             --file unsigned/app.ipa
 
@@ -215,13 +210,13 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET_NAME || 'app-distribution' }}
         run: |
           # Upload IPA file
-          bun wrangler r2 object put \
+          bunx wrangler r2 object put \
             "$R2_BUCKET/ipa/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa" \
             --file signed/app.ipa \
             --content-type "application/octet-stream"
 
           # Upload manifest.plist
-          bun wrangler r2 object put \
+          bunx wrangler r2 object put \
             "$R2_BUCKET/ipa/${{ matrix.app.id }}/manifest.plist" \
             --file signed/manifest.plist \
             --content-type "application/xml"
