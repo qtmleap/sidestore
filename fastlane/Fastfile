@@ -40,14 +40,25 @@ platform :ios do
     new_bundle_id = "#{options[:bundle_id]}.#{options[:team_id]}"
     UI.message("New Bundle ID: #{new_bundle_id}")
 
-    # Create App ID if it doesn't exist
-    produce(
-      username: ENV["APPLE_ID"],
-      app_identifier: new_bundle_id,
-      app_name: options[:app_name] || new_bundle_id,
-      team_id: options[:team_id],
-      skip_itc: true
-    )
+    # Create App ID if it doesn't exist using Spaceship API
+    begin
+      Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(**api_key)
+      existing_bundle_ids = Spaceship::ConnectAPI::BundleId.all.map(&:identifier)
+
+      unless existing_bundle_ids.include?(new_bundle_id)
+        UI.message("Creating App ID: #{new_bundle_id}")
+        Spaceship::ConnectAPI::BundleId.create(
+          name: (options[:app_name] || new_bundle_id).gsub(/[^a-zA-Z0-9]/, ""),
+          identifier: new_bundle_id,
+          platform: Spaceship::ConnectAPI::BundleId::Platform::IOS
+        )
+        UI.success("Created App ID: #{new_bundle_id}")
+      else
+        UI.message("App ID already exists: #{new_bundle_id}")
+      end
+    rescue => e
+      UI.important("Could not create App ID: #{e.message}")
+    end
 
     # Fetch certificates and provisioning profiles using match
     match(
