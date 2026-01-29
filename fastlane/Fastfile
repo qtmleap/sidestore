@@ -40,45 +40,94 @@ platform :ios do
     new_bundle_id = "#{options[:bundle_id]}.#{options[:team_id]}"
     UI.message("New Bundle ID: #{new_bundle_id}")
 
-    # Fetch certificates and provisioning profiles using match
-    # Note: App ID must be created manually in Apple Developer Portal first
+    # Extract IPA to find all nested bundle IDs (extensions)
+    temp_dir = Dir.mktmpdir("ipa_extract")
+    ipa_path = options[:ipa_path]
+
+    # Unzip the IPA
+    sh("unzip -q '#{ipa_path}' -d '#{temp_dir}'")
+
+    # Find all bundle IDs in the IPA (main app + extensions)
+    all_bundle_ids = []
+    extension_bundle_ids = []
+
+    # Find all Info.plist files and extract bundle IDs
+    Dir.glob("#{temp_dir}/Payload/**/*.app/Info.plist").each do |plist|
+      bundle_id_output = `/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "#{plist}" 2>/dev/null`.strip
+      unless bundle_id_output.empty?
+        # Transform to new bundle ID format
+        # Original: com.atebits.Tweetie3 -> com.atebits.Tweetie3.TEAM_ID
+        # Extension: com.atebits.Tweetie3.NotificationContentExtension -> com.atebits.Tweetie3.TEAM_ID.NotificationContentExtension
+        if bundle_id_output.start_with?(options[:bundle_id])
+          suffix = bundle_id_output.sub(options[:bundle_id], "")
+          transformed_id = "#{new_bundle_id}#{suffix}"
+          all_bundle_ids << transformed_id
+          extension_bundle_ids << transformed_id unless suffix.empty?
+          UI.message("Found bundle ID: #{bundle_id_output} -> #{transformed_id}")
+        end
+      end
+    end
+
+    # Also check for appex (app extensions)
+    Dir.glob("#{temp_dir}/Payload/**/*.appex/Info.plist").each do |plist|
+      bundle_id_output = `/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "#{plist}" 2>/dev/null`.strip
+      unless bundle_id_output.empty?
+        if bundle_id_output.start_with?(options[:bundle_id])
+          suffix = bundle_id_output.sub(options[:bundle_id], "")
+          transformed_id = "#{new_bundle_id}#{suffix}"
+          all_bundle_ids << transformed_id
+          extension_bundle_ids << transformed_id
+          UI.message("Found extension bundle ID: #{bundle_id_output} -> #{transformed_id}")
+        end
+      end
+    end
+
+    all_bundle_ids.uniq!
+    extension_bundle_ids.uniq!
+
+    UI.message("All bundle IDs to provision: #{all_bundle_ids.join(', ')}")
+
+    # Clean up temp directory
+    FileUtils.rm_rf(temp_dir)
+
+    # Fetch certificates and provisioning profiles using match for ALL bundle IDs
+    # Note: App IDs must be created manually in Apple Developer Portal first
     match(
       git_url: ENV["MATCH_GIT_URL"],
       type: match_type,
-      app_identifier: new_bundle_id,
+      app_identifier: all_bundle_ids,
       team_id: options[:team_id],
       api_key: api_key,
       readonly: false
     )
 
-    # Get provisioning profile path and signing identity
-    # Find the installed profile by searching in the Provisioning Profiles directory
+    # Get provisioning profile paths for all bundle IDs
     profiles_dir = File.join(Dir.home, "Library", "MobileDevice", "Provisioning Profiles")
-    profile_path = nil
 
-    # Get profile name from MATCH_PROVISIONING_PROFILE_MAPPING
-    profile_mapping = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING]
-    expected_profile_name = profile_mapping[new_bundle_id] if profile_mapping
+    # Build provisioning profile hash for resign action
+    # Format: { "bundle_id" => "profile_path" }
+    provisioning_profiles = {}
 
-    UI.message("Looking for profile: #{expected_profile_name}")
+    all_bundle_ids.each do |bundle_id|
+      profile_path = nil
+      Dir.glob(File.join(profiles_dir, "*.mobileprovision")).each do |file|
+        content = File.read(file)
+        # Check if this profile contains the bundle ID
+        if content.include?(bundle_id)
+          profile_path = file
+          UI.message("Found profile for #{bundle_id}: #{file}")
+          break
+        end
+      end
 
-    # Find the profile file
-    Dir.glob(File.join(profiles_dir, "*.mobileprovision")).each do |file|
-      # Read profile and check name
-      content = File.read(file)
-      if content.include?(expected_profile_name.to_s) || content.include?(new_bundle_id)
-        profile_path = file
-        UI.message("Found profile: #{file}")
-        break
+      if profile_path
+        provisioning_profiles[bundle_id] = profile_path
+      else
+        UI.important("Warning: Could not find profile for #{bundle_id}")
       end
     end
 
-    # Fallback: use the most recently modified profile
-    if profile_path.nil?
-      profiles = Dir.glob(File.join(profiles_dir, "*.mobileprovision"))
-      profile_path = profiles.max_by { |f| File.mtime(f) }
-      UI.message("Using most recent profile: #{profile_path}")
-    end
+    UI.message("Provisioning profiles map: #{provisioning_profiles}")
 
     # Get the full signing identity from the keychain
     # Use security command to find the distribution certificate
@@ -114,14 +163,13 @@ platform :ios do
     UI.user_error!("Could not find Apple Distribution signing identity in keychain") if signing_identity.nil?
 
     UI.message("Signing identity: #{signing_identity}")
-    UI.message("Profile path: #{profile_path}")
+    UI.message("Provisioning profiles: #{provisioning_profiles}")
 
-    # Resign the IPA with new bundle ID
+    # Resign the IPA with new bundle ID and all provisioning profiles
     resign(
       ipa: options[:ipa_path],
       signing_identity: signing_identity,
-      provisioning_profile: profile_path,
-      bundle_id: new_bundle_id,
+      provisioning_profile: provisioning_profiles,
       use_app_entitlements: false
     )
 
