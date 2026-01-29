@@ -133,6 +133,15 @@ jobs:
               new_bundle_id = "#{options[:bundle_id]}.#{options[:team_id]}"
               UI.message("New Bundle ID: #{new_bundle_id}")
 
+              # Create App ID if it doesn't exist
+              produce(
+                app_identifier: new_bundle_id,
+                app_name: options[:app_name] || new_bundle_id,
+                team_id: options[:team_id],
+                api_key: api_key,
+                skip_itc: true  # Don't create on App Store Connect, just Developer Portal
+              )
+
               # Fetch certificates and provisioning profiles using match
               # readonly: false allows creating new profiles if they don't exist
               match(
