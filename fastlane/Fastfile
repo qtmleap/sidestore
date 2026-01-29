@@ -42,7 +42,9 @@ platform :ios do
 
     # Extract IPA to find all nested bundle IDs (extensions)
     temp_dir = Dir.mktmpdir("ipa_extract")
-    ipa_path = options[:ipa_path]
+    ipa_path = File.expand_path(options[:ipa_path])
+
+    UI.message("IPA path: #{ipa_path}")
 
     # Unzip the IPA
     sh("unzip -q '#{ipa_path}' -d '#{temp_dir}'")
@@ -167,18 +169,19 @@ platform :ios do
 
     # Resign the IPA with new bundle ID and all provisioning profiles
     resign(
-      ipa: options[:ipa_path],
+      ipa: ipa_path,
       signing_identity: signing_identity,
       provisioning_profile: provisioning_profiles,
       use_app_entitlements: false
     )
 
     # Move resigned IPA to signed directory
-    resigned_ipa = options[:ipa_path].gsub(".ipa", "-resigned.ipa")
+    output_path = File.expand_path(options[:output_path])
+    resigned_ipa = ipa_path.gsub(".ipa", "-resigned.ipa")
     if File.exist?(resigned_ipa)
-      FileUtils.mv(resigned_ipa, options[:output_path])
+      FileUtils.mv(resigned_ipa, output_path)
     else
-      FileUtils.cp(options[:ipa_path], options[:output_path])
+      FileUtils.cp(ipa_path, output_path)
     end
   end
 
