@@ -51,28 +51,36 @@ platform :ios do
       readonly: false
     )
 
-    # Get signing identity and provisioning profile from match
-    # match stores values in Actions.lane_context with keys like:
-    # sigh_<bundle_id>_<type>_profile-path, sigh_<bundle_id>_<type>_certificate-name
-    profile_key = "sigh_#{new_bundle_id}_#{match_type}_profile-path"
-    cert_key = "sigh_#{new_bundle_id}_#{match_type}_certificate-name"
+    # Get provisioning profile path and signing identity
+    # Find the installed profile by searching in the Provisioning Profiles directory
+    profiles_dir = File.join(Dir.home, "Library", "MobileDevice", "Provisioning Profiles")
+    profile_path = nil
 
-    profile_path = Actions.lane_context[profile_key]
-    signing_identity = Actions.lane_context[cert_key]
+    # Get profile name from MATCH_PROVISIONING_PROFILE_MAPPING
+    profile_mapping = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING]
+    expected_profile_name = profile_mapping[new_bundle_id] if profile_mapping
 
-    # Fallback
-    if profile_path.nil? || profile_path.empty?
-      # Build path from UUID if available
-      uuid_key = "sigh_#{new_bundle_id}_#{match_type}"
-      uuid = Actions.lane_context[uuid_key]
-      if uuid
-        profile_path = File.join(Dir.home, "Library", "MobileDevice", "Provisioning Profiles", "#{uuid}.mobileprovision")
+    UI.message("Looking for profile: #{expected_profile_name}")
+
+    # Find the profile file
+    Dir.glob(File.join(profiles_dir, "*.mobileprovision")).each do |file|
+      # Read profile and check name
+      content = File.read(file)
+      if content.include?(expected_profile_name.to_s) || content.include?(new_bundle_id)
+        profile_path = file
+        UI.message("Found profile: #{file}")
+        break
       end
     end
 
-    if signing_identity.nil? || signing_identity.empty?
-      signing_identity = "Apple Distribution"
+    # Fallback: use the most recently modified profile
+    if profile_path.nil?
+      profiles = Dir.glob(File.join(profiles_dir, "*.mobileprovision"))
+      profile_path = profiles.max_by { |f| File.mtime(f) }
+      UI.message("Using most recent profile: #{profile_path}")
     end
+
+    signing_identity = "Apple Distribution"
 
     UI.message("Signing identity: #{signing_identity}")
     UI.message("Profile path: #{profile_path}")
