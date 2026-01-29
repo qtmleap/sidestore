@@ -51,13 +51,21 @@ platform :ios do
       readonly: false
     )
 
-    # Get signing identity and provisioning profile
-    signing_identity = ENV["sigh_#{new_bundle_id}_#{match_type}_certificate-name"] ||
-                       lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING]&.values&.first ||
-                       ENV["FASTLANE_SIGNING_IDENTITY"]
+    # Get signing identity and provisioning profile from match
+    # match sets: sigh_<bundle_id>_<type>_profile-path for the path
+    # and sigh_<bundle_id>_<type>_profile-name for the name
+    profile_path = ENV["sigh_#{new_bundle_id}_#{match_type}_profile-path"]
+    signing_identity = ENV["sigh_#{new_bundle_id}_#{match_type}_certificate-name"]
 
-    profile_path = ENV["sigh_#{new_bundle_id}_#{match_type}"] ||
-                   lane_context[SharedValues::SIGH_PROFILE_PATH]
+    # Fallback to lane context if env vars are not set
+    if profile_path.nil? || profile_path.empty?
+      profile_path = lane_context[SharedValues::SIGH_PROFILE_PATH]
+    end
+
+    if signing_identity.nil? || signing_identity.empty?
+      signing_identity = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING]&.values&.first ||
+                         "Apple Distribution"
+    end
 
     UI.message("Signing identity: #{signing_identity}")
     UI.message("Profile path: #{profile_path}")
