@@ -52,19 +52,26 @@ platform :ios do
     )
 
     # Get signing identity and provisioning profile from match
-    # match sets: sigh_<bundle_id>_<type>_profile-path for the path
-    # and sigh_<bundle_id>_<type>_profile-name for the name
-    profile_path = ENV["sigh_#{new_bundle_id}_#{match_type}_profile-path"]
-    signing_identity = ENV["sigh_#{new_bundle_id}_#{match_type}_certificate-name"]
+    # match stores values in Actions.lane_context with keys like:
+    # sigh_<bundle_id>_<type>_profile-path, sigh_<bundle_id>_<type>_certificate-name
+    profile_key = "sigh_#{new_bundle_id}_#{match_type}_profile-path"
+    cert_key = "sigh_#{new_bundle_id}_#{match_type}_certificate-name"
 
-    # Fallback to lane context if env vars are not set
+    profile_path = Actions.lane_context[profile_key]
+    signing_identity = Actions.lane_context[cert_key]
+
+    # Fallback
     if profile_path.nil? || profile_path.empty?
-      profile_path = lane_context[SharedValues::SIGH_PROFILE_PATH]
+      # Build path from UUID if available
+      uuid_key = "sigh_#{new_bundle_id}_#{match_type}"
+      uuid = Actions.lane_context[uuid_key]
+      if uuid
+        profile_path = File.join(Dir.home, "Library", "MobileDevice", "Provisioning Profiles", "#{uuid}.mobileprovision")
+      end
     end
 
     if signing_identity.nil? || signing_identity.empty?
-      signing_identity = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING]&.values&.first ||
-                         "Apple Distribution"
+      signing_identity = "Apple Distribution"
     end
 
     UI.message("Signing identity: #{signing_identity}")
