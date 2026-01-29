@@ -68,6 +68,11 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Install Wrangler
+        run: |
+          bun install -g wrangler
+          wrangler --version
+
       - name: Setup Ruby
         uses: ruby/setup-ruby@v1
         with:
