@@ -7,18 +7,18 @@ platform :ios do
   lane :export_signing do |options|
     keychain_name = "fastlane_tmp_keychain"
     keychain_password = "fastlane_tmp"
-    
+
     # Setup CI environment (creates temporary keychain)
     setup_ci(force: true)
-    
+
     # Determine match type
     match_type = options[:type] || "adhoc"
     bundle_id = options[:bundle_id]
     team_id = options[:team_id]
-    
+
     UI.message("Bundle ID: #{bundle_id}")
     UI.message("Match type: #{match_type}")
-    
+
     # Fetch certificate and profile with match
     match(
       git_url: ENV["MATCH_GIT_URL"],
@@ -29,28 +29,33 @@ platform :ios do
       keychain_name: keychain_name,
       keychain_password: keychain_password
     )
-    
+
     # Export p12 from keychain
     keychain_path = File.expand_path("~/Library/Keychains/#{keychain_name}-db")
-    output_p12 = options[:output_p12] || "cert.p12"
+    workspace_root = ENV['GITHUB_WORKSPACE'] || File.expand_path("..", __dir__)
+
+    output_p12 = File.join(workspace_root, options[:output_p12] || "cert.p12")
     p12_password = options[:p12_password] || ENV["MATCH_PASSWORD"]
-    
+
     UI.message("Exporting certificate from keychain: #{keychain_path}")
-    
+    UI.message("Output p12: #{output_p12}")
+
     sh("security find-identity -v -p codesigning '#{keychain_path}'")
     sh("security export -k '#{keychain_path}' -t identities -f pkcs12 -P '#{p12_password}' -o '#{output_p12}'")
-    
+
     # Copy profile
-    output_profile = options[:output_profile] || "profile.mobileprovision"
+    output_profile = File.join(workspace_root, options[:output_profile] || "profile.mobileprovision")
     profile_path = Dir.glob(File.expand_path("~/Library/MobileDevice/Provisioning Profiles/*.mobileprovision")).first
-    
+
+    UI.message("Output profile: #{output_profile}")
+
     if profile_path
       FileUtils.cp(profile_path, output_profile)
       UI.success("Profile exported: #{output_profile}")
     else
       UI.user_error!("No provisioning profile found!")
     end
-    
+
     UI.success("Certificate exported: #{output_p12}")
     UI.success("Ready for zsign!")
   end
