@@ -75,9 +75,20 @@ jobs:
           bundler-cache: false
 
       - name: Install fastlane
+        run: gem install fastlane --no-document
+
+      - name: Install zsign
         run: |
-          gem install fastlane --no-document
-          fastlane --version
+          brew install openssl
+          git clone https://github.com/zhlynn/zsign.git /tmp/zsign
+          cd /tmp/zsign
+          g++ -std=c++11 -O3 -o zsign \
+            *.cpp common/*.cpp \
+            -I/opt/homebrew/opt/openssl@3/include \
+            -L/opt/homebrew/opt/openssl@3/lib \
+            -lcrypto -lssl
+          sudo mv zsign /usr/local/bin/
+          zsign --help || true
 
       - name: Download unsigned IPA from R2
         env:
@@ -95,23 +106,60 @@ jobs:
 
           echo "Downloaded IPA size: $(du -h unsigned/app.ipa | cut -f1)"
 
-      - name: Sign IPA with fastlane
+      - name: Fetch certificate and profile from match
         env:
-          APPLE_ID: ${{ secrets.APPLE_ID }}
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           MATCH_GIT_URL: "https://x-access-token:${{ secrets.MATCH_GIT_TOKEN }}@github.com/qtmleap/match.git"
-          APP_STORE_CONNECT_API_KEY_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY_ID }}
-          APP_STORE_CONNECT_API_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_API_KEY_ISSUER_ID }}
-          APP_STORE_CONNECT_API_KEY_CONTENT: ${{ secrets.APP_STORE_CONNECT_API_KEY_KEY }}
         run: |
-          mkdir -p signed
+          NEW_BUNDLE_ID="${{ matrix.app.bundle_id }}.${TEAM_ID}"
+          MATCH_TYPE="${{ inputs.certificate_type || 'adhoc' }}"
 
-          fastlane ios sign_ipa \
-            cert_type:"${{ inputs.certificate_type }}" \
-            bundle_id:"${{ matrix.app.bundle_id }}" \
-            team_id:"${TEAM_ID}" \
-            ipa_path:"unsigned/app.ipa" \
-            output_path:"signed/app.ipa"
+          # Clone match repo
+          git clone "$MATCH_GIT_URL" /tmp/match
+
+          # Find cert and profile
+          CERT_DIR="/tmp/match/certs/distribution"
+          PROFILE_DIR="/tmp/match/profiles/$MATCH_TYPE"
+
+          # Decrypt certificate (.p12)
+          CERT_FILE=$(ls "$CERT_DIR"/*.p12 2>/dev/null | head -1 || ls "$CERT_DIR"/*.cer 2>/dev/null | head -1)
+          if [ -f "$CERT_FILE" ]; then
+            # Match encrypts files with openssl
+            openssl enc -aes-256-cbc -d -pbkdf2 \
+              -in "$CERT_FILE" \
+              -out cert.p12 \
+              -pass "pass:$MATCH_PASSWORD" 2>/dev/null || cp "$CERT_FILE" cert.p12
+            echo "Certificate ready: cert.p12"
+          fi
+
+          # Decrypt provisioning profile
+          PROFILE_NAME="AdHoc_${NEW_BUNDLE_ID}.mobileprovision"
+          PROFILE_FILE="$PROFILE_DIR/$PROFILE_NAME"
+          if [ ! -f "$PROFILE_FILE" ]; then
+            PROFILE_FILE=$(ls "$PROFILE_DIR"/*.mobileprovision 2>/dev/null | head -1)
+          fi
+
+          if [ -f "$PROFILE_FILE" ]; then
+            openssl enc -aes-256-cbc -d -pbkdf2 \
+              -in "$PROFILE_FILE" \
+              -out profile.mobileprovision \
+              -pass "pass:$MATCH_PASSWORD" 2>/dev/null || cp "$PROFILE_FILE" profile.mobileprovision
+            echo "Profile ready: profile.mobileprovision"
+          fi
+
+          ls -la cert.p12 profile.mobileprovision || true
+
+      - name: Sign IPA with zsign
+        run: |
+          NEW_BUNDLE_ID="${{ matrix.app.bundle_id }}.${TEAM_ID}"
+
+          # Sign with zsign
+          zsign -k cert.p12 \
+                -p "${{ secrets.MATCH_PASSWORD }}" \
+                -m profile.mobileprovision \
+                -b "$NEW_BUNDLE_ID" \
+                -o signed/app.ipa \
+                unsigned/app.ipa
 
           echo "✅ Signed IPA created"
           echo "Signed IPA size: $(du -h signed/app.ipa | cut -f1)"
@@ -143,7 +191,7 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          rm -rf fastlane
+          rm -rf /tmp/match cert.p12 profile.mobileprovision
 
       - name: Upload artifacts
         if: success()
