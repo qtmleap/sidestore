@@ -102,34 +102,17 @@ jobs:
         env:
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           MATCH_GIT_URL: "https://x-access-token:${{ secrets.MATCH_GIT_TOKEN }}@github.com/qtmleap/match.git"
-          MATCH_KEYCHAIN_NAME: "fastlane_tmp_keychain"
-          MATCH_KEYCHAIN_PASSWORD: "fastlane_tmp"
         run: |
           NEW_BUNDLE_ID="${{ matrix.app.bundle_id }}.${TEAM_ID}"
           MATCH_TYPE="${{ inputs.certificate_type || 'adhoc' }}"
 
-          # Use fastlane match to fetch and install certs/profiles
-          fastlane run setup_ci
-
-          fastlane run match \
-            git_url:"$MATCH_GIT_URL" \
-            type:"$MATCH_TYPE" \
-            app_identifier:"$NEW_BUNDLE_ID" \
+          fastlane ios export_signing \
+            bundle_id:"$NEW_BUNDLE_ID" \
             team_id:"${TEAM_ID}" \
-            readonly:true \
-            keychain_name:"$MATCH_KEYCHAIN_NAME" \
-            keychain_password:"$MATCH_KEYCHAIN_PASSWORD"
-
-          # Export p12 from keychain for zsign
-          security find-identity -v -p codesigning ~/Library/Keychains/${MATCH_KEYCHAIN_NAME}-db
-          security export -k ~/Library/Keychains/${MATCH_KEYCHAIN_NAME}-db -t identities -f pkcs12 -P "$MATCH_PASSWORD" -o cert.p12
-
-          # Copy profile from installed location
-          PROFILE_PATH=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision | head -1)
-          cp "$PROFILE_PATH" profile.mobileprovision
-
-          echo "Certificate and profile ready"
-          ls -la cert.p12 profile.mobileprovision
+            type:"$MATCH_TYPE" \
+            output_p12:"cert.p12" \
+            output_profile:"profile.mobileprovision" \
+            p12_password:"$MATCH_PASSWORD"
 
       - name: Sign IPA with zsign
         env:
