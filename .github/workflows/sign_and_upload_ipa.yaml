@@ -120,11 +120,12 @@ jobs:
         run: |
           NEW_BUNDLE_ID="${{ matrix.app.bundle_id }}.${TEAM_ID}"
 
-          # Sign with zsign
+          # Sign with zsign (-z 9 for maximum compression)
           zsign -k cert.p12 \
                 -p "$MATCH_PASSWORD" \
                 -m profile.mobileprovision \
                 -b "$NEW_BUNDLE_ID" \
+                -z 9 \
                 -o signed/app.ipa \
                 unsigned/app.ipa
 
