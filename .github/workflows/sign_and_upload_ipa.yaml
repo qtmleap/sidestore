@@ -76,7 +76,7 @@ jobs:
       - name: Install fastlane and zsign
         run: |
           gem install fastlane --no-document
-          brew install pkg-config openssl minizip
+          brew install minizip
           git clone https://github.com/zhlynn/zsign.git /tmp/zsign
           cd /tmp/zsign/build/macos
           make clean && make
@@ -148,12 +148,14 @@ jobs:
 
       - name: Summary
         run: |
+          FILE_SIZE=$(du -h signed/app.ipa | cut -f1)
           echo "## ✅ ${{ matrix.app.name }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
           echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
           echo "| App ID | ${{ matrix.app.id }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Bundle ID | ${{ matrix.app.bundle_id }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Bundle ID | ${{ matrix.app.bundle_id }}.${TEAM_ID} |" >> $GITHUB_STEP_SUMMARY
+          echo "| File Size | ${FILE_SIZE} |" >> $GITHUB_STEP_SUMMARY
           echo "| URL | ${R2_BASE_URL}/${{ matrix.app.id }}/${{ matrix.app.id }}.ipa |" >> $GITHUB_STEP_SUMMARY
 
       - name: Cleanup
