@@ -9,7 +9,7 @@
   "scripts": {
     "dev": "vite --host",
     "build": "tsc -b --noEmit && vite build --mode ${CLOUDFLARE_ENV}",
-    "predeploy": "tsc -b --noEmit && vite build --mode ${CLOUDFLARE_ENV}",
+    "predeploy": "NODE_ENV=production tsc -b --noEmit && NODE_ENV=production vite build --mode ${CLOUDFLARE_ENV}",
     "deploy": "wrangler deploy --keep-vars --env=${CLOUDFLARE_ENV}"
   },
   "dependencies": {
