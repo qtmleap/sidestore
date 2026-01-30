@@ -83,7 +83,7 @@ jobs:
           git clone https://github.com/zhlynn/zsign.git /tmp/zsign
           cd /tmp/zsign
           g++ -std=c++11 -O3 -o zsign \
-            *.cpp common/*.cpp \
+            zsign.cpp common/base64.cpp common/common.cpp \
             -I/opt/homebrew/opt/openssl@3/include \
             -L/opt/homebrew/opt/openssl@3/lib \
             -lcrypto -lssl
