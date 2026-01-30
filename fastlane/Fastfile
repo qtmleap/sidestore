@@ -1,337 +1,57 @@
 # This file contains the fastlane.tools configuration
-# You can find the documentation at https://docs.fastlane.tools
-#
-# For a list of all available actions, check out
-#
-#     https://docs.fastlane.tools/actions
-#
-# For a list of all available plugins, check out
-#
-#     https://docs.fastlane.tools/plugins/available-plugins
-#
-
-# Uncomment the line if you want fastlane to automatically update itself
-# update_fastlane
 
 default_platform(:ios)
 
 platform :ios do
-  desc "Sign IPA with certificates and profiles from match"
-  lane :sign_ipa do |options|
-    # Setup CI environment (creates temporary keychain automatically)
-    setup_ci
-
-    # Setup App Store Connect API Key
-    api_key = app_store_connect_api_key(
-      key_id: ENV["APP_STORE_CONNECT_API_KEY_ID"],
-      issuer_id: ENV["APP_STORE_CONNECT_API_ISSUER_ID"],
-      key_content: ENV["APP_STORE_CONNECT_API_KEY_CONTENT"],
-      is_key_content_base64: true
-    )
-
+  desc "Export certificate and profile for zsign"
+  lane :export_signing do |options|
+    keychain_name = "fastlane_tmp_keychain"
+    keychain_password = "fastlane_tmp"
+    
+    # Setup CI environment (creates temporary keychain)
+    setup_ci(force: true)
+    
     # Determine match type
-    match_type = case options[:cert_type]
-      when "appstore" then "appstore"
-      when "enterprise" then "enterprise"
-      else "adhoc"
-    end
-
-    # Create new bundle_id with team_id suffix
-    new_bundle_id = "#{options[:bundle_id]}.#{options[:team_id]}"
-    UI.message("New Bundle ID: #{new_bundle_id}")
-
-    # Extract IPA to find all nested bundle IDs (extensions)
-    temp_dir = Dir.mktmpdir("ipa_extract")
-
-    # Resolve path relative to workspace root (parent of fastlane directory)
-    workspace_root = ENV['GITHUB_WORKSPACE'] || File.expand_path("..", __dir__)
-    ipa_path = File.expand_path(options[:ipa_path], workspace_root)
-
-    UI.message("Workspace root: #{workspace_root}")
-    UI.message("IPA path: #{ipa_path}")
-
-    # Unzip the IPA
-    sh("unzip -q '#{ipa_path}' -d '#{temp_dir}'")
-
-    # Find all bundle IDs in the IPA (main app + extensions)
-    # Track both original (in IPA) and transformed (with team ID) bundle IDs
-    bundle_id_mapping = {}  # original -> transformed
-    extension_bundle_ids = []
+    match_type = options[:type] || "adhoc"
+    bundle_id = options[:bundle_id]
     team_id = options[:team_id]
-    original_bundle_id = options[:bundle_id]
-
-    # Find all Info.plist files and extract bundle IDs
-    Dir.glob("#{temp_dir}/Payload/**/*.app/Info.plist").each do |plist|
-      bundle_id_output = `/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "#{plist}" 2>/dev/null`.strip
-      unless bundle_id_output.empty?
-        original_id = bundle_id_output
-        # Check if bundle ID already has team ID suffix (already resigned IPA)
-        # If so, use it as-is; otherwise transform it
-        if bundle_id_output.include?(".#{team_id}")
-          # Already has team ID, use as-is
-          transformed_id = bundle_id_output
-          UI.message("Bundle ID already has team suffix: #{bundle_id_output}")
-        elsif bundle_id_output.start_with?(original_bundle_id)
-          # Transform: com.atebits.Tweetie3 -> com.atebits.Tweetie3.TEAM_ID
-          suffix = bundle_id_output.sub(original_bundle_id, "")
-          transformed_id = "#{new_bundle_id}#{suffix}"
-          UI.message("Transforming bundle ID: #{bundle_id_output} -> #{transformed_id}")
-        else
-          UI.message("Skipping unrelated bundle ID: #{bundle_id_output}")
-          next
-        end
-        bundle_id_mapping[original_id] = transformed_id
-        extension_bundle_ids << transformed_id if plist.include?(".appex") || transformed_id != new_bundle_id
-      end
-    end
-
-    # Also check for appex (app extensions)
-    Dir.glob("#{temp_dir}/Payload/**/*.appex/Info.plist").each do |plist|
-      bundle_id_output = `/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "#{plist}" 2>/dev/null`.strip
-      unless bundle_id_output.empty?
-        original_id = bundle_id_output
-        # Check if bundle ID already has team ID suffix
-        if bundle_id_output.include?(".#{team_id}")
-          transformed_id = bundle_id_output
-          UI.message("Extension already has team suffix: #{bundle_id_output}")
-        elsif bundle_id_output.start_with?(original_bundle_id)
-          suffix = bundle_id_output.sub(original_bundle_id, "")
-          transformed_id = "#{new_bundle_id}#{suffix}"
-          UI.message("Transforming extension bundle ID: #{bundle_id_output} -> #{transformed_id}")
-        else
-          UI.message("Skipping unrelated extension bundle ID: #{bundle_id_output}")
-          next
-        end
-        bundle_id_mapping[original_id] = transformed_id
-        extension_bundle_ids << transformed_id
-      end
-    end
-
-    all_bundle_ids = bundle_id_mapping.values.uniq
-    extension_bundle_ids.uniq!
-
-    UI.message("Bundle ID mapping (original -> transformed):")
-    bundle_id_mapping.each { |k, v| UI.message("  #{k} -> #{v}") }
-
-    # Clean up temp directory
-    FileUtils.rm_rf(temp_dir)
-
-    # First, provision the main app bundle ID (this must succeed)
-    UI.message("Provisioning main app: #{new_bundle_id}")
+    
+    UI.message("Bundle ID: #{bundle_id}")
+    UI.message("Match type: #{match_type}")
+    
+    # Fetch certificate and profile with match
     match(
       git_url: ENV["MATCH_GIT_URL"],
       type: match_type,
-      app_identifier: new_bundle_id,
-      team_id: options[:team_id],
-      api_key: api_key,
-      readonly: false
+      app_identifier: bundle_id,
+      team_id: team_id,
+      readonly: true,
+      keychain_name: keychain_name,
+      keychain_password: keychain_password
     )
-
-    # Try to provision extensions individually, but don't fail if they don't exist
-    successfully_provisioned = [new_bundle_id]
-    extension_bundle_ids.each do |ext_bundle_id|
-      begin
-        UI.message("Attempting to provision extension: #{ext_bundle_id}")
-        match(
-          git_url: ENV["MATCH_GIT_URL"],
-          type: match_type,
-          app_identifier: ext_bundle_id,
-          team_id: options[:team_id],
-          api_key: api_key,
-          readonly: true  # Only use existing profiles for extensions
-        )
-        successfully_provisioned << ext_bundle_id
-        UI.success("Successfully provisioned: #{ext_bundle_id}")
-      rescue => e
-        UI.important("Could not provision #{ext_bundle_id}: #{e.message}")
-        UI.important("Extension will be stripped from IPA")
-      end
-    end
-
-    UI.message("Successfully provisioned bundle IDs: #{successfully_provisioned.join(', ')}")
-
-    # Determine which extensions need to be stripped (not provisioned)
-    unprovisionable_extensions = extension_bundle_ids - successfully_provisioned
-    UI.message("Extensions to strip (not provisioned): #{unprovisionable_extensions.join(', ')}") unless unprovisionable_extensions.empty?
-
-    # If there are extensions we couldn't provision, we need to strip them from the IPA
-    if unprovisionable_extensions.any?
-      UI.message("Stripping unprovisionable extensions from IPA...")
-
-      # Re-extract IPA to modify it
-      strip_temp_dir = Dir.mktmpdir("ipa_strip")
-      sh("unzip -q '#{ipa_path}' -d '#{strip_temp_dir}'")
-
-      # Find and remove appex directories for unprovisionable extensions
-      unprovisionable_extensions.each do |ext_bundle_id|
-        # Find the original bundle ID for this extension
-        original_ext_id = transformed_to_original[ext_bundle_id] || ext_bundle_id
-
-        Dir.glob("#{strip_temp_dir}/Payload/**/*.appex/Info.plist").each do |plist|
-          appex_bundle_id = `/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "#{plist}" 2>/dev/null`.strip
-          if appex_bundle_id == original_ext_id || appex_bundle_id == ext_bundle_id
-            appex_dir = File.dirname(plist)
-            UI.message("Removing extension: #{appex_dir} (#{appex_bundle_id})")
-            FileUtils.rm_rf(appex_dir)
-          end
-        end
-      end
-
-      # Repackage the IPA
-      stripped_ipa = "#{strip_temp_dir}/stripped.ipa"
-      Dir.chdir("#{strip_temp_dir}") do
-        sh("zip -qr '#{stripped_ipa}' Payload")
-      end
-
-      # Replace original IPA with stripped version
-      FileUtils.cp(stripped_ipa, ipa_path)
-      FileUtils.rm_rf(strip_temp_dir)
-
-      UI.success("IPA stripped of unprovisionable extensions")
-    end
-
-    # Get provisioning profile paths for successfully provisioned bundle IDs only
-    profiles_dir = File.join(Dir.home, "Library", "MobileDevice", "Provisioning Profiles")
-
-    # Create reverse mapping: transformed -> original
-    transformed_to_original = bundle_id_mapping.invert
-
-    successfully_provisioned.each do |transformed_id|
-      profile_path = nil
-      Dir.glob(File.join(profiles_dir, "*.mobileprovision")).each do |file|
-        content = File.read(file)
-        # Check if this profile contains the transformed bundle ID
-        if content.include?(transformed_id)
-          profile_path = file
-          UI.message("Found profile for #{transformed_id}: #{file}")
-          break
-        end
-      end
-
-      if profile_path
-        # Find the original bundle ID for this transformed ID
-        original_id = transformed_to_original[transformed_id] || transformed_id
-        provisioning_profiles[original_id] = profile_path
-        UI.message("Mapping: #{original_id} -> #{profile_path}")
-      else
-        UI.important("Warning: Could not find profile for #{transformed_id}")
-      end
-    end
-
-    UI.message("Provisioning profiles map (original bundle ID -> profile):")
-    provisioning_profiles.each { |k, v| UI.message("  #{k} -> #{v}") }
-
-    # Get the full signing identity from the keychain
-    # Use security command to find the distribution certificate
-    keychain_output = `security find-identity -v -p codesigning`
-    UI.message("Available signing identities:\n#{keychain_output}")
-
-    # Find Apple Distribution identity (match installs it with team name)
-    signing_identity = nil
-    keychain_output.each_line do |line|
-      if line.include?("Apple Distribution") && line.include?(options[:team_id])
-        # Extract the identity string between quotes
-        match = line.match(/"([^"]+)"/)
-        if match
-          signing_identity = match[1]
-          break
-        end
-      end
-    end
-
-    # Fallback to any Apple Distribution identity
-    if signing_identity.nil?
-      keychain_output.each_line do |line|
-        if line.include?("Apple Distribution")
-          match = line.match(/"([^"]+)"/)
-          if match
-            signing_identity = match[1]
-            break
-          end
-        end
-      end
-    end
-
-    UI.user_error!("Could not find Apple Distribution signing identity in keychain") if signing_identity.nil?
-
-    UI.message("Signing identity: #{signing_identity}")
-    UI.message("Provisioning profiles: #{provisioning_profiles}")
-
-    # Resign the IPA with new bundle ID and all provisioning profiles
-    resign(
-      ipa: ipa_path,
-      signing_identity: signing_identity,
-      provisioning_profile: provisioning_profiles,
-      use_app_entitlements: false
-    )
-
-    # Move resigned IPA to signed directory
-    output_path = File.expand_path(options[:output_path], workspace_root)
-    resigned_ipa = ipa_path.gsub(".ipa", "-resigned.ipa")
-    if File.exist?(resigned_ipa)
-      FileUtils.mv(resigned_ipa, output_path)
+    
+    # Export p12 from keychain
+    keychain_path = File.expand_path("~/Library/Keychains/#{keychain_name}-db")
+    output_p12 = options[:output_p12] || "cert.p12"
+    p12_password = options[:p12_password] || ENV["MATCH_PASSWORD"]
+    
+    UI.message("Exporting certificate from keychain: #{keychain_path}")
+    
+    sh("security find-identity -v -p codesigning '#{keychain_path}'")
+    sh("security export -k '#{keychain_path}' -t identities -f pkcs12 -P '#{p12_password}' -o '#{output_p12}'")
+    
+    # Copy profile
+    output_profile = options[:output_profile] || "profile.mobileprovision"
+    profile_path = Dir.glob(File.expand_path("~/Library/MobileDevice/Provisioning Profiles/*.mobileprovision")).first
+    
+    if profile_path
+      FileUtils.cp(profile_path, output_profile)
+      UI.success("Profile exported: #{output_profile}")
     else
-      FileUtils.cp(ipa_path, output_path)
+      UI.user_error!("No provisioning profile found!")
     end
-  end
-
-  desc "Fetch or generate Ad Hoc provisioning profiles"
-  lane :match_adhoc do
-    match(
-      type: "adhoc",
-      readonly: false
-    )
-  end
-
-  desc "Resign IPA with Ad Hoc profile and upload to R2"
-  lane :resign_and_upload do |options|
-    ipa_path = options[:ipa_path]
-    app_identifier = options[:app_identifier]
-
-    unless ipa_path
-      UI.user_error!("Please provide ipa_path parameter")
-    end
-
-    unless app_identifier
-      UI.user_error!("Please provide app_identifier parameter")
-    end
-
-    # Create App Identifier if it doesn't exist
-    produce(
-      username: ENV["APPLE_ID"],
-      app_identifier: app_identifier,
-      skip_itc: true
-    )
-
-    # Generate Ad Hoc provisioning profile with all registered devices
-    match(
-      type: "adhoc",
-      app_identifier: app_identifier,
-      force_for_new_devices: true,
-      readonly: false
-    )
-
-    # Get the provisioning profile path
-    profile_path = lane_context[SharedValues::MATCH_PROVISIONING_PROFILE_MAPPING][app_identifier]
-
-    # Resign the IPA
-    resigned_ipa_path = resign(
-      ipa: ipa_path,
-      signing_identity: "Apple Distribution",
-      provisioning_profile: profile_path
-    )
-
-    # Extract app info for R2 path
-    bundle_id = app_identifier
-    version = get_ipa_info_plist_value(ipa: resigned_ipa_path, key: "CFBundleShortVersionString")
-
-    # Upload to R2 using wrangler
-    r2_path = "#{bundle_id}/#{version}/app.ipa"
-
-    sh("bun wrangler r2 object put app-distribution/#{r2_path} --file #{resigned_ipa_path}")
-
-    UI.success("Successfully uploaded resigned IPA to R2: #{r2_path}")
-
-    resigned_ipa_path
+    
+    UI.success("Certificate exported: #{output_p12}")
+    UI.success("Ready for zsign!")
   end
 end
