@@ -102,6 +102,8 @@ jobs:
         env:
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           MATCH_GIT_URL: "https://x-access-token:${{ secrets.MATCH_GIT_TOKEN }}@github.com/qtmleap/match.git"
+          MATCH_KEYCHAIN_NAME: "fastlane_tmp_keychain"
+          MATCH_KEYCHAIN_PASSWORD: "fastlane_tmp"
         run: |
           NEW_BUNDLE_ID="${{ matrix.app.bundle_id }}.${TEAM_ID}"
           MATCH_TYPE="${{ inputs.certificate_type || 'adhoc' }}"
@@ -114,11 +116,13 @@ jobs:
             type:"$MATCH_TYPE" \
             app_identifier:"$NEW_BUNDLE_ID" \
             team_id:"${TEAM_ID}" \
-            readonly:true
+            readonly:true \
+            keychain_name:"$MATCH_KEYCHAIN_NAME" \
+            keychain_password:"$MATCH_KEYCHAIN_PASSWORD"
 
           # Export p12 from keychain for zsign
-          security find-identity -v -p codesigning
-          security export -k ~/Library/Keychains/fastlane_tmp_keychain -t identities -f pkcs12 -P "$MATCH_PASSWORD" -o cert.p12
+          security find-identity -v -p codesigning ~/Library/Keychains/${MATCH_KEYCHAIN_NAME}-db
+          security export -k ~/Library/Keychains/${MATCH_KEYCHAIN_NAME}-db -t identities -f pkcs12 -P "$MATCH_PASSWORD" -o cert.p12
 
           # Copy profile from installed location
           PROFILE_PATH=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision | head -1)
