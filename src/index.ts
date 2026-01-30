@@ -82,7 +82,7 @@ app.openapi(
       <key>metadata</key>
       <dict>
         <key>bundle-identifier</key>
-        <string>${appInfo.bundleId}</string>
+        <string>jp.qleap.${appInfo.bundleId.split('.').pop()}</string>
         <key>bundle-version</key>
         <string>${appInfo.version}</string>
         <key>kind</key>
