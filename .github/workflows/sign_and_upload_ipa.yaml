@@ -74,7 +74,7 @@ jobs:
           git clone https://github.com/zhlynn/zsign.git /tmp/zsign
           cd /tmp/zsign/build/macos
           make clean && make
-          sudo mv zsign /usr/local/bin/
+          sudo mv /tmp/zsign/bin/zsign /usr/local/bin/
           zsign --help || true
 
       - name: Download unsigned IPA from R2
