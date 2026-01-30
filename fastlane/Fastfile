@@ -144,19 +144,54 @@ platform :ios do
         UI.success("Successfully provisioned: #{ext_bundle_id}")
       rescue => e
         UI.important("Could not provision #{ext_bundle_id}: #{e.message}")
-        UI.important("You may need to create this App ID in the Developer Portal")
+        UI.important("Extension will be stripped from IPA")
       end
     end
 
     UI.message("Successfully provisioned bundle IDs: #{successfully_provisioned.join(', ')}")
 
+    # Determine which extensions need to be stripped (not provisioned)
+    unprovisionable_extensions = extension_bundle_ids - successfully_provisioned
+    UI.message("Extensions to strip (not provisioned): #{unprovisionable_extensions.join(', ')}") unless unprovisionable_extensions.empty?
+
+    # If there are extensions we couldn't provision, we need to strip them from the IPA
+    if unprovisionable_extensions.any?
+      UI.message("Stripping unprovisionable extensions from IPA...")
+
+      # Re-extract IPA to modify it
+      strip_temp_dir = Dir.mktmpdir("ipa_strip")
+      sh("unzip -q '#{ipa_path}' -d '#{strip_temp_dir}'")
+
+      # Find and remove appex directories for unprovisionable extensions
+      unprovisionable_extensions.each do |ext_bundle_id|
+        # Find the original bundle ID for this extension
+        original_ext_id = transformed_to_original[ext_bundle_id] || ext_bundle_id
+
+        Dir.glob("#{strip_temp_dir}/Payload/**/*.appex/Info.plist").each do |plist|
+          appex_bundle_id = `/usr/libexec/PlistBuddy -c "Print :CFBundleIdentifier" "#{plist}" 2>/dev/null`.strip
+          if appex_bundle_id == original_ext_id || appex_bundle_id == ext_bundle_id
+            appex_dir = File.dirname(plist)
+            UI.message("Removing extension: #{appex_dir} (#{appex_bundle_id})")
+            FileUtils.rm_rf(appex_dir)
+          end
+        end
+      end
+
+      # Repackage the IPA
+      stripped_ipa = "#{strip_temp_dir}/stripped.ipa"
+      Dir.chdir("#{strip_temp_dir}") do
+        sh("zip -qr '#{stripped_ipa}' Payload")
+      end
+
+      # Replace original IPA with stripped version
+      FileUtils.cp(stripped_ipa, ipa_path)
+      FileUtils.rm_rf(strip_temp_dir)
+
+      UI.success("IPA stripped of unprovisionable extensions")
+    end
+
     # Get provisioning profile paths for successfully provisioned bundle IDs only
     profiles_dir = File.join(Dir.home, "Library", "MobileDevice", "Provisioning Profiles")
-
-    # Build provisioning profile hash for resign action
-    # IMPORTANT: resign expects ORIGINAL bundle IDs (as in the IPA) mapped to profile paths
-    # The resign action will change the bundle ID to whatever is in the profile
-    provisioning_profiles = {}
 
     # Create reverse mapping: transformed -> original
     transformed_to_original = bundle_id_mapping.invert
