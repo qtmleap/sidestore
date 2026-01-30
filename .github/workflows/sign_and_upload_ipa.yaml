@@ -68,25 +68,12 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Setup Ruby
-        uses: ruby/setup-ruby@v1
-        with:
-          ruby-version: "3.2"
-          bundler-cache: false
-
-      - name: Install fastlane
-        run: gem install fastlane --no-document
-
       - name: Install zsign
         run: |
-          brew install openssl
+          brew install pkg-config openssl minizip
           git clone https://github.com/zhlynn/zsign.git /tmp/zsign
-          cd /tmp/zsign
-          g++ -std=c++11 -O3 -o zsign \
-            zsign.cpp common/base64.cpp common/common.cpp \
-            -I/opt/homebrew/opt/openssl@3/include \
-            -L/opt/homebrew/opt/openssl@3/lib \
-            -lcrypto -lssl
+          cd /tmp/zsign/build/macos
+          make clean && make
           sudo mv zsign /usr/local/bin/
           zsign --help || true
 
