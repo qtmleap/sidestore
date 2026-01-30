@@ -68,14 +68,19 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install zsign
+      - name: Setup Ruby
+        uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.2"
+
+      - name: Install fastlane and zsign
         run: |
+          gem install fastlane --no-document
           brew install pkg-config openssl minizip
           git clone https://github.com/zhlynn/zsign.git /tmp/zsign
           cd /tmp/zsign/build/macos
           make clean && make
           sudo mv /tmp/zsign/bin/zsign /usr/local/bin/
-          zsign --help || true
 
       - name: Download unsigned IPA from R2
         env:
@@ -93,7 +98,7 @@ jobs:
 
           echo "Downloaded IPA size: $(du -h unsigned/app.ipa | cut -f1)"
 
-      - name: Fetch certificate and profile from match
+      - name: Fetch certificate and profile with match
         env:
           MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
           MATCH_GIT_URL: "https://x-access-token:${{ secrets.MATCH_GIT_TOKEN }}@github.com/qtmleap/match.git"
@@ -101,48 +106,36 @@ jobs:
           NEW_BUNDLE_ID="${{ matrix.app.bundle_id }}.${TEAM_ID}"
           MATCH_TYPE="${{ inputs.certificate_type || 'adhoc' }}"
 
-          # Clone match repo
-          git clone "$MATCH_GIT_URL" /tmp/match
+          # Use fastlane match to fetch and install certs/profiles
+          fastlane run setup_ci
 
-          # Find cert and profile
-          CERT_DIR="/tmp/match/certs/distribution"
-          PROFILE_DIR="/tmp/match/profiles/$MATCH_TYPE"
+          fastlane run match \
+            git_url:"$MATCH_GIT_URL" \
+            type:"$MATCH_TYPE" \
+            app_identifier:"$NEW_BUNDLE_ID" \
+            team_id:"${TEAM_ID}" \
+            readonly:true
 
-          # Decrypt certificate (.p12)
-          CERT_FILE=$(ls "$CERT_DIR"/*.p12 2>/dev/null | head -1 || ls "$CERT_DIR"/*.cer 2>/dev/null | head -1)
-          if [ -f "$CERT_FILE" ]; then
-            # Match encrypts files with openssl
-            openssl enc -aes-256-cbc -d -pbkdf2 \
-              -in "$CERT_FILE" \
-              -out cert.p12 \
-              -pass "pass:$MATCH_PASSWORD" 2>/dev/null || cp "$CERT_FILE" cert.p12
-            echo "Certificate ready: cert.p12"
-          fi
+          # Export p12 from keychain for zsign
+          security find-identity -v -p codesigning
+          security export -k ~/Library/Keychains/fastlane_tmp_keychain -t identities -f pkcs12 -P "$MATCH_PASSWORD" -o cert.p12
 
-          # Decrypt provisioning profile
-          PROFILE_NAME="AdHoc_${NEW_BUNDLE_ID}.mobileprovision"
-          PROFILE_FILE="$PROFILE_DIR/$PROFILE_NAME"
-          if [ ! -f "$PROFILE_FILE" ]; then
-            PROFILE_FILE=$(ls "$PROFILE_DIR"/*.mobileprovision 2>/dev/null | head -1)
-          fi
+          # Copy profile from installed location
+          PROFILE_PATH=$(ls ~/Library/MobileDevice/Provisioning\ Profiles/*.mobileprovision | head -1)
+          cp "$PROFILE_PATH" profile.mobileprovision
 
-          if [ -f "$PROFILE_FILE" ]; then
-            openssl enc -aes-256-cbc -d -pbkdf2 \
-              -in "$PROFILE_FILE" \
-              -out profile.mobileprovision \
-              -pass "pass:$MATCH_PASSWORD" 2>/dev/null || cp "$PROFILE_FILE" profile.mobileprovision
-            echo "Profile ready: profile.mobileprovision"
-          fi
-
-          ls -la cert.p12 profile.mobileprovision || true
+          echo "Certificate and profile ready"
+          ls -la cert.p12 profile.mobileprovision
 
       - name: Sign IPA with zsign
+        env:
+          MATCH_PASSWORD: ${{ secrets.MATCH_PASSWORD }}
         run: |
           NEW_BUNDLE_ID="${{ matrix.app.bundle_id }}.${TEAM_ID}"
 
           # Sign with zsign
           zsign -k cert.p12 \
-                -p "${{ secrets.MATCH_PASSWORD }}" \
+                -p "$MATCH_PASSWORD" \
                 -m profile.mobileprovision \
                 -b "$NEW_BUNDLE_ID" \
                 -o signed/app.ipa \
@@ -178,7 +171,7 @@ jobs:
       - name: Cleanup
         if: always()
         run: |
-          rm -rf /tmp/match cert.p12 profile.mobileprovision
+          rm -rf cert.p12 profile.mobileprovision /tmp/zsign
 
       - name: Upload artifacts
         if: success()
