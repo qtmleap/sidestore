@@ -35,11 +35,11 @@ export const FilenameParamSchema = z.object({
 export const AppInfoSchema = z.object({
   results: z.array(
     z.object({
-      bundleId: z.string(),
-      version: z.string(),
-      trackName: z.string(),
-      artworkUrl512: z.string(),
-      artworkUrl60: z.string()
+      bundleId: z.string().nonempty(),
+      version: z.string().nonempty(),
+      trackName: z.string().nonempty(),
+      artworkUrl512: z.url(),
+      artworkUrl60: z.url()
     })
   )
 })
