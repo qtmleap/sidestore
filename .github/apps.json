@@ -16,6 +16,11 @@
       "bundle_id": "com.atebits.Tweetie3"
     },
     {
+      "id": "985746746",
+      "name": "Discord",
+      "bundle_id": "com.hammerandchisel.discord"
+    },
+    {
       "id": "544007664",
       "name": "YouTube",
       "bundle_id": "com.google.ios.youtube"

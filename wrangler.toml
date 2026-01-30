@@ -1,7 +1,6 @@
 name = "appstore_clone"
 main = "src/index.ts"
 compatibility_date = "2026-01-01"
-compatibility_flags = ["nodejs_compat_v2"]
 
 [env.dev]
 name = "appstore_clone_dev"
