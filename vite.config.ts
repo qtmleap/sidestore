@@ -110,7 +110,10 @@ export default defineConfig(({ mode }) => {
     build: {
       target: 'esnext',
       minify: true,
-      chunkSizeWarningLimit: 1000
+      chunkSizeWarningLimit: 1000,
+    },
+    esbuild: {
+      drop: mode === 'production' ? ['console', 'debugger'] : [],
     },
     worker: {
       format: 'es'
