@@ -20,12 +20,14 @@ platform :ios do
     UI.message("Match type: #{match_type}")
 
     # Fetch certificate and profile with match
+    # force_for_new_devices: regenerate profile if new devices are registered
     match(
       git_url: ENV["MATCH_GIT_URL"],
       type: match_type,
       app_identifier: bundle_id,
       team_id: team_id,
-      readonly: true,
+      readonly: false,
+      force_for_new_devices: true,
       keychain_name: keychain_name,
       keychain_password: keychain_password
     )
