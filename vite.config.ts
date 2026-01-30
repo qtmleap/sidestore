@@ -101,15 +101,16 @@ export default defineConfig(({ mode }) => {
         },
       }),
       sitemap({
-        hostname: 'https://biccame-musume.com',
-        dynamicRoutes: ['/', '/about', '/calendar', '/characters', '/contact', '/location', '/ranking'],
+        hostname: 'https://app.qleap.jp',
+        dynamicRoutes: ['/'],
         changefreq: 'weekly',
         outDir: 'dist/client'
       })
     ],
     build: {
       target: 'esnext',
-      minify: true
+      minify: true,
+      chunkSizeWarningLimit: 1000
     },
     worker: {
       format: 'es'
