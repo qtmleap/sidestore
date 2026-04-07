@@ -7,8 +7,10 @@ export const InstallPrompt = () => {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null)
 
   useEffect(() => {
-    // iOS Safari check
-    const isIos = /iPad|iPhone|iPod/.test(navigator.userAgent)
+    // iOS Safari check（iPadOS 13以降のiPadも検出）
+    const isIos =
+      /iPhone|iPod|iPad/.test(navigator.userAgent) ||
+      (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1)
     const isInStandaloneMode =
       'standalone' in window.navigator && (window.navigator as { standalone?: boolean }).standalone
 
