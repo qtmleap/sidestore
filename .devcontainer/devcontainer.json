@@ -1,6 +1,8 @@
 {
   "name": "Hono Vite React Workers",
-  "dockerComposeFile": ["compose.yaml"],
+  "dockerComposeFile": [
+    "compose.yaml"
+  ],
   "service": "app",
   "workspaceFolder": "/home/vscode/app",
   "shutdownAction": "stopCompose",
