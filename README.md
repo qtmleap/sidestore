@@ -1,6 +1,8 @@
-# ビッカメ娘
+# SideStore
 
-Vite + React + TanStack Router + Cloudflare Workers を使用した TypeScript プロジェクト
+An App Store clone built with Hono, React, and Tailwind CSS on Cloudflare Workers.
+
+Hono + Vite + React + TanStack Router + Cloudflare Workers で動作する Web アプリケーションです。
 
 ## 技術スタック
 
@@ -29,7 +31,7 @@ bun install
 bun run dev
 ```
 
-http://localhost:5173 でローカルサーバーが起動します。
+`http://localhost:5173` でローカルサーバーが起動します。
 
 ## ビルド
 
